@@ -1,0 +1,206 @@
+class ListsController < ApplicationController
+  #before_action :require_login
+  def index
+    @list = List.new
+    @lists = List.all
+  end
+  def show
+    @list = List.find(params[:id])
+    @task = Task.new
+  end
+  def new 
+    @list = List.new
+    @list.tasks.build
+  end
+  def create
+    @list = List.new(list_params)
+    if @list.save
+      redirect_to @list
+    else
+      render :new
+    end
+  end
+  def destroy
+    @list = List.find(params[:id])
+    @task = Task.find_by(params[:id])
+    @task.destroy
+    redirect_to @list
+  end
+  private
+  def list_params
+    params.require(:list).permit(:name, tasks_attributes: [:name, :status])
+  end
+  def require_login
+    return head(:forbidden) unless session.include? :user_id    
+  end
+end
+class TasksController < ApplicationController
+  
+  def index
+    @task = Task.all
+  end
+  def create
+    @list = List.find(params[:list_id])
+    @task = @list.tasks.build(task_params)
+    @task.save
+    redirect_to @list
+  end
+  
+  def edit
+    @task = Task.find(params[:id])
+    @task.update(task_params)
+    redirect_to list_path(@task.list)
+  end
+  def destroy
+    @task = Task.find(params[:id])
+    @task.destroy
+    redirect_to list_path(@task.list)
+  end
+  private
+  
+  def task_params
+    params.require(:task).permit(:name, :status)
+  end
+end
+
+
+require File.expand_path('../boot', __FILE__)
+require 'rails/all'
+# Require the gems listed in Gemfile, including any gems
+# you've limited to :test, :development, or :production.
+Bundler.require(*Rails.groups)
+module RailsGroupTaskManager
+  class Application < Rails::Application
+    # Settings in config/environments/* take precedence over those specified here.
+    # Application configuration should go into files in config/initializers
+    # -- all .rb files in that directory are automatically loaded.
+    # Set Time.zone default to the specified zone and make Active Record auto-convert to this zone.
+    # Run "rake -D time" for a list of tasks for finding time zone names. Default is UTC.
+    # config.time_zone = 'Central Time (US & Canada)'
+    # The default locale is :en and all translations from config/locales/*.rb,yml are auto loaded.
+    # config.i18n.load_path += Dir[Rails.root.join('my', 'locales', '*.{rb,yml}').to_s]
+    # config.i18n.default_locale = :de
+    # Do not swallow errors in after_commit/after_rollback callbacks.
+    config.active_record.raise_in_transactional_callbacks = true
+  end
+end
+
+# SQLite version 3.x
+#   gem install sqlite3
+#
+#   Ensure the SQLite 3 gem is defined in your Gemfile
+#   gem 'sqlite3'
+#
+default: &default
+  adapter: sqlite3
+  pool: 5
+  timeout: 5000
+development:
+  <<: *default
+  database: db/development.sqlite3
+# Warning: The database defined as "test" will be erased and
+# re-generated from your development database when you run "rake".
+# Do not set this db to the same as development or production.
+test:
+  <<: *default
+  database: db/test.sqlite3
+production:
+  <<: *default
+  database: db/production.sqlite3
+class List < ActiveRecord::Base
+  has_many :tasks
+  has_many :user_lists
+  has_many :users, through: :user_lists
+  validates_presence_of :name, uniqueness: true
+  accepts_nested_attributes_for :tasks
+end
+
+
+class User < ActiveRecord::Base
+  # Include default devise modules. Others available are:
+  # :confirmable, :lockable, :timeoutable and :omniauthable
+  devise :database_authenticatable, :registerable,
+         :recoverable, :rememberable, :trackable, :validatable
+     devise :omniauthable, :omniauth_providers => [:facebook]
+  has_many :user_lists
+  has_many :lists, through: :user_lists
+  def self.from_omniauth(auth)
+    where(provider: auth.provider, uid: auth.uid).first_or_create do |user|
+      user.email = auth.info.email
+      user.password = Devise.friendly_token[0,20]
+    end      
+  end
+end
+<h2>Resend confirmation instructions</h2>
+<%= form_for(resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }) do |f| %>
+  <%= devise_error_messages! %>
+  <div class="field">
+    <%= f.label :email %><br />
+    <%= f.email_field :email, autofocus: true, value: (resource.pending_reconfirmation? ? resource.unconfirmed_email : resource.email) %>
+  </div>
+  <div class="actions">
+    <%= f.submit "Resend confirmation instructions" %>
+  </div>
+<% end %>
+<%= render "devise/shared/links" %>
+
+class List < ActiveRecord::Base
+  has_many :tasks
+  has_many :user_lists
+  has_many :users, through: :user_lists
+  validates_presence_of :name, uniqueness: true
+  accepts_nested_attributes_for :tasks
+end
+
+Rails.application.routes.draw do
+  root 'lists#index'
+  resources :lists do
+    resources :tasks
+  end
+  devise_for :users, :controllers => { :omniauth_callbacks => "users/omniauth_callbacks" }
+  # The priority is based upon order of creation: first created -> highest priority.
+  # See how all your routes lay out with "rake routes".
+  # You can have the root of your site routed with "root"
+  
+  # Example of regular route:
+  #   get 'products/:id' => 'catalog#view'
+  # Example of named route that can be invoked with purchase_url(id: product.id)
+  #   get 'products/:id/purchase' => 'catalog#purchase', as: :purchase
+  # Example resource route (maps HTTP verbs to controller actions automatically):
+  #   resources :products
+  # Example resource route with options:
+  #   resources :products do
+  #     member do
+  #       get 'short'
+  #       post 'toggle'
+  #     end
+  #
+  #     collection do
+  #       get 'sold'
+  #     end
+  #   end
+  # Example resource route with sub-resources:
+  #   resources :products do
+  #     resources :comments, :sales
+  #     resource :seller
+  #   end
+  # Example resource route with more complex sub-resources:
+  #   resources :products do
+  #     resources :comments
+  #     resources :sales do
+  #       get 'recent', on: :collection
+  #     end
+  #   end
+  # Example resource route with concerns:
+  #   concern :toggleable do
+  #     post 'toggle'
+  #   end
+  #   resources :posts, concerns: :toggleable
+  #   resources :photos, concerns: :toggleable
+  # Example resource route within a namespace:
+  #   namespace :admin do
+  #     # Directs /admin/products/* to Admin::ProductsController
+  #     # (app/controllers/admin/products_controller.rb)
+  #     resources :products
+  #   end
+end
